@@ -3,20 +3,23 @@ import numpy as np
 import plotly.graph_objects as go
 import pandas as pd
 import ntpath
+from scipy.signal import argrelextrema
+
 
 from scipy.signal import find_peaks
 import googleDriveFileLoader
 #TODO: Data Analysis
 # Resolve Peaks (Maxima)
 
-filename1 = 'J465p5_T01_NdNiO3_STO_2hrs250C_2piecesCaH2.xrdml'
+filename1 = 'J465p6_T01_NdNiO3_STO_2hrs250C_15piecesCaH2.xrdml'
 foldername1 = 'J465 CaH2 test'
-filename2 = 'J465p6_T01_NdNiO3_STO_2hrs250C_15piecesCaH2.xrdml'
-foldername2 = 'J465 CaH2 test'
+filename2 = 'SrTiO3_001_substrate.xrdml'
+foldername2 = 'SrTiO3_001_substrate'
 
 fLoader1 = googleDriveFileLoader.fileLoader(filename1,foldername1)
 fLoader2 = googleDriveFileLoader.fileLoader(filename2,foldername2)
 tth1 = fLoader1.createDict()
+tth2 = fLoader2.createDict()
 
 #Return peak centers and amplitudes 
 def getPeaks(x, y, peaks):
@@ -43,9 +46,9 @@ def getwidth_incr(x,sigma,std):
   ind_incr = int(round(std*fwhm/incr))
   return (ind_incr,fwhm)
 
-def Smooth(x,y,sigma,std,weightG,weightL):
-  #Returns the gaussian/lorenztian smoothed data.
-  smoothed_vals = np.zeros(y.shape)
+def PseudoVoigt(x,y,sigma,std,eta):
+  """Returns the gaussian/lorenztian smoothed data."""
+  pseudo_voigt = np.zeros(y.shape)
   incr,fwhm = getwidth_incr(x,sigma,std)
   x = np.pad(x,incr)
   y = np.pad(y,incr)
@@ -54,8 +57,9 @@ def Smooth(x,y,sigma,std,weightG,weightL):
     gaussian = gaussianFunc(x[i:i+2*incr],x[i+incr],sigma)
     gaussian = gaussian/ sum(gaussian)
     lorentzian = lorentzianFunc(x[i:i+2*incr],x[i+incr],fwhm)
-    smoothed_vals[i] = sum(weightG * y[i:i+2*incr] * gaussian + weightL * y[i:i+2*incr] * lorentzian)
-  return smoothed_vals
+    lorentzian = lorentzian/ sum(lorentzian)
+    pseudo_voigt[i] = sum(eta * y[i:i+2*incr] * gaussian + (1-eta) * y[i:i+2*incr] * lorentzian)
+  return pseudo_voigt
 
 # Returns the file name from a path 
 def fileName(file):
@@ -69,9 +73,9 @@ def rangeSlider(x,y):
   df = pd.DataFrame(data)
 
   # Smooth Data
-  peaksApprox, _ = find_peaks(Smooth(x,y,0.1, 2, 0.5, 0.5), prominence = 80 )
+  peaksApprox, _ = find_peaks(PseudoVoigt(x,y,0.3,2.7,0.9), prominence = 80 )
   xValApprox = x[peaksApprox]
-  yValApprox = Smooth(x,y,0.1, 2, 0.5, 0.5)[peaksApprox]
+  yValApprox = PseudoVoigt(x,y,0.3,2.7,0.9)[peaksApprox]
 
   # Creates the figure
   fig = go.Figure()
@@ -82,7 +86,7 @@ def rangeSlider(x,y):
   
   # Adds the smoothing 
   fig.add_trace(
-    go.Scatter(x = x, y =Smooth(x,y,0.1, 2, 0.5, 0.5), name = "approximation" )
+    go.Scatter(x = x, y =PseudoVoigt(x,y,0.3,2.7,0.9), name = "approximation" )
   )
   
   #Adds the peaks from the smooth graph
@@ -91,9 +95,9 @@ def rangeSlider(x,y):
   )
 
   # Set the title
-  fig.update_layout(
-    title_text=fileName(infile)
-  )
+  # fig.update_layout(
+  #   title_text=fileName(infile)
+  # )
   
   # Add range slider
   fig.update_layout(
@@ -119,13 +123,13 @@ def stackGraphs(x1, y1, x2, y2, peakProm):
   fig = go.Figure()
  
   # Smooth Data
-  peaksApprox1, _ = find_peaks(Smooth(x1,y1,0.1, 2, 0.5, 0.5), prominence = int(peakProm))
+  peaksApprox1, _ = find_peaks(PseudoVoigt(x1,y1,0.3,2.7,0.9), prominence = int(peakProm))
   xValApprox1 = x1[peaksApprox1]
-  yValApprox1 = Smooth(x1,y1,0.1, 2, 0.5, 0.5)[peaksApprox1]
+  yValApprox1 = PseudoVoigt(x1,y1,0.3,2.7,0.9)[peaksApprox1]
 
-  peaksApprox2, _ = find_peaks(Smooth(x2,y2,0.1, 2, 0.5, 0.5), prominence = int(peakProm))
+  peaksApprox2, _ = find_peaks(PseudoVoigt(x2,y2,0.3,2.7,0.9), prominence = int(peakProm))
   xValApprox2 = x2[peaksApprox2]
-  yValApprox2 = Smooth(x2,y2,0.1, 2, 0.5, 0.5)[peaksApprox2]
+  yValApprox2 = PseudoVoigt(x2,y2,0.3,2.7,0.9)[peaksApprox2]
 
   # Raw Data
   coordinates1, coordinates2 = [], []
@@ -149,7 +153,7 @@ def stackGraphs(x1, y1, x2, y2, peakProm):
   # First Smooth Data 
   fig.add_trace(go.Scatter(
     x=x1,
-    y=Smooth(x1,y1,0.1, 2, 0.5, 0.5),
+    y=PseudoVoigt(x1,y1,0.3,2.7,0.9),
     name=filename1,
     yaxis="y"
   ))
@@ -176,7 +180,7 @@ def stackGraphs(x1, y1, x2, y2, peakProm):
   # Second Smooth Data 
   fig.add_trace(go.Scatter(
     x=x_vals2,
-    y=Smooth(x2,y2,0.1, 2, 0.5, 0.5),
+    y=PseudoVoigt(x2,y2,0.3,2.7,0.9),
     name=filename2,
     yaxis="y2"
   ))
@@ -256,14 +260,103 @@ def stackGraphs(x1, y1, x2, y2, peakProm):
       margin=dict(
           t=100,
           b=100
-      ),
+      )
   )
 
   fig.show()
 
-x_vals,y_vals = np.array(list(tth.keys())),np.array(list(tth.values()))
+#TODO: Data Output
+def plotSemilogy(x,y):
+  plt.semilogy(x,y)
+  # plt.semilogy(x,PseudoVoigt(x,y,0.05,2.7,1))
+  plt.xlabel(r'Angle (2$\Theta$)')
+  plt.ylabel(r'Intensity (Arb. Units)')
+  plt.xlim([20,30])
+  plt.ylim([1e0,1e7])
+
+def initializeTheta(x,y,prominence):
+  peaks, _ = find_peaks(PseudoVoigt(x_vals,y_vals,0.05,2.7,1), prominence = prominence)
+  x0 = x[peaks[1]]
+  yp = 0.75 * y[peaks[1]]
+  sigma = np.random.rand()
+  return [x0,yp,sigma]
+
+
+def gradientDescent(theta0,x,y1,y2,eta,epsilon,min_x,max_x):
+  [x0,yp,sigma] = theta0
+  prev_J = 0.0
+  counts = 0
+  N = int(len((np.where(x>min_x) and np.where(x<max_x)[0])))
+  while True:
+    prev_error = J = 0.0
+    print([x0,yp,sigma])
+    # Adjust x0
+    while True:
+      deltaJ_x0 = 0
+      for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
+        h = y2[i] + yp*gaussianFunc(x[i],x0,sigma)
+        A1 = ((x[i] - x0)/(sigma ** 2 * np.sqrt(2*np.pi))) 
+        EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
+        deltaJ_x0 = deltaJ_x0 + (2/N) * (h - y1[i]) * 2 * A1 * EXP * yp
+        J = J + (1e-2) * (2/N) * (h - y1[i]) ** 2   # (1e-2) scalar prevents J from overflowing
+      x0 = x0 - eta * deltaJ_x0
+      error = deltaJ_x0 ** 2
+      if (abs(error - prev_error) < epsilon):
+        break
+    
+    # Adjust yp 
+    prev_error = 0.0
+    while True:   
+      deltaJ_yp = 0.0
+      for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
+        h = y2[i] + yp*gaussianFunc(x[i],x0,sigma)
+        EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
+        deltaJ_yp = deltaJ_yp + (2/N) * (h - y1[i])* EXP
+        J = J + (2/N)*(h - y1[i])**2
+      yp = yp - 1e4 * eta * deltaJ_yp
+      error = deltaJ_yp ** 2
+      if (abs(error - prev_error) < epsilon):
+        break
+
+    # Adjust sigma
+    prev_error = 0.0
+    while True:
+      deltaJ_sigma = 0
+      for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
+        h = y2[i] + yp*gaussianFunc(x[i],x0,sigma) 
+        A2 = ((x[i] - x0)**2/(sigma ** 3 * np.sqrt(2*np.pi))) 
+        EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
+        deltaJ_sigma = deltaJ_sigma + (2/N) * (h - y1[i]) * A2 * EXP * yp
+        J = J + (2/N)*(h - y1[i])**2
+      sigma = sigma - eta * deltaJ_sigma
+      error = deltaJ_sigma ** 2
+      if (abs(error - prev_error) < epsilon):
+        break
+    
+    if (abs(J - prev_J) < epsilon) or counts > 1000:
+      break
+    prev_J = J
+    counts = counts + 1
+  return [x0,yp,sigma]
+
+x_vals,y_vals = np.array(list(tth1.keys())),np.array(list(tth1.values()))
 
 x_vals2, y_vals2 = np.array(list(tth2.keys())),np.array(list(tth2.values()))
+th0 = initializeTheta(x_vals,y_vals,10)
+th = gradientDescent(th0,x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1),PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1),5e-5,0.01,23.4,28)
+# peakProminence = input("Enter Prominence for Peaks: ")
+plotSemilogy(x_vals,PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1)+th[1]*gaussianFunc(x_vals,th[0],th[2]))
+# plotSemilogy(x_vals,PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1))
+plotSemilogy(x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1))
+# plt.show()
+# peaksApprox, _ = find_peaks(PseudoVoigt(x_vals,y_vals,0.05,2.7,1), prominence = 10)
+# for p in peaksApprox:
+#   plt.plot(x_vals[p], PseudoVoigt(x_vals,y_vals,0.05,2.7,1)[p], marker='o', markersize=3, color="red")
+# print(np.argmax(PseudoVoigt(x_vals2,y_vals2,0.1,3,1)))
 
-peakProminence = input("Enter Prominence for Peaks: ")
-stackGraphs(x_vals,y_vals, x_vals2, y_vals2, peakProminence)
+
+# plotSemilogy(x_vals,sf*PseudoVoigt(x_vals,y_vals,0.1,3,1)-PseudoVoigt(x_vals2,y_vals2,0.1,3,1))
+plt.show()
+
+
+
