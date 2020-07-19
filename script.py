@@ -282,7 +282,7 @@ def initializeTheta(x,y,prominence):
   return [x0,yp,sigma]
 
 
-def gradientDescent(theta0,x,y1,y2,eta,epsilon,min_x,max_x):
+def gradientDescent(theta0,x,y,eta,epsilon,min_x,max_x):
   [x0,yp,sigma] = theta0
   prev_J = 0.0
   counts = 0
@@ -294,11 +294,11 @@ def gradientDescent(theta0,x,y1,y2,eta,epsilon,min_x,max_x):
     while True:
       deltaJ_x0 = 0
       for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
-        h = y2[i] + yp*gaussianFunc(x[i],x0,sigma)
+        h = yp*gaussianFunc(x[i],x0,sigma)
         A1 = ((x[i] - x0)/(sigma ** 2 * np.sqrt(2*np.pi))) 
         EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
-        deltaJ_x0 = deltaJ_x0 + (2/N) * (h - y1[i]) * 2 * A1 * EXP * yp
-        J = J + (1e-2) * (2/N) * (h - y1[i]) ** 2   # (1e-2) scalar prevents J from overflowing
+        deltaJ_x0 = deltaJ_x0 + (2/N) * (h - y[i]) * 2 * A1 * EXP * yp
+        J = J + (1e-2) * (2/N) * (h - y[i]) ** 2   # (1e-2) scalar prevents J from overflowing
       x0 = x0 - eta * deltaJ_x0
       error = deltaJ_x0 ** 2
       if (abs(error - prev_error) < epsilon):
@@ -309,10 +309,10 @@ def gradientDescent(theta0,x,y1,y2,eta,epsilon,min_x,max_x):
     while True:   
       deltaJ_yp = 0.0
       for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
-        h = y2[i] + yp*gaussianFunc(x[i],x0,sigma)
+        h = yp*gaussianFunc(x[i],x0,sigma)
         EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
-        deltaJ_yp = deltaJ_yp + (2/N) * (h - y1[i])* EXP
-        J = J + (2/N)*(h - y1[i])**2
+        deltaJ_yp = deltaJ_yp + (2/N) * (h - y[i])* EXP
+        J = J + (2/N)*(h - y[i])**2
       yp = yp - 1e4 * eta * deltaJ_yp
       error = deltaJ_yp ** 2
       if (abs(error - prev_error) < epsilon):
@@ -323,11 +323,11 @@ def gradientDescent(theta0,x,y1,y2,eta,epsilon,min_x,max_x):
     while True:
       deltaJ_sigma = 0
       for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
-        h = y2[i] + yp*gaussianFunc(x[i],x0,sigma) 
+        h = yp*gaussianFunc(x[i],x0,sigma) 
         A2 = ((x[i] - x0)**2/(sigma ** 3 * np.sqrt(2*np.pi))) 
         EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
-        deltaJ_sigma = deltaJ_sigma + (2/N) * (h - y1[i]) * A2 * EXP * yp
-        J = J + (2/N)*(h - y1[i])**2
+        deltaJ_sigma = deltaJ_sigma + (2/N) * (h - y[i]) * A2 * EXP * yp
+        J = J + (2/N)*(h - y[i])**2
       sigma = sigma - eta * deltaJ_sigma
       error = deltaJ_sigma ** 2
       if (abs(error - prev_error) < epsilon):
@@ -343,7 +343,7 @@ x_vals,y_vals = np.array(list(tth1.keys())),np.array(list(tth1.values()))
 
 x_vals2, y_vals2 = np.array(list(tth2.keys())),np.array(list(tth2.values()))
 th0 = initializeTheta(x_vals,y_vals,10)
-th = gradientDescent(th0,x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1),PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1),5e-5,0.01,23.4,28)
+th = gradientDescent(th0,x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1)-PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1),5e-5,0.01,23.4,28)
 # peakProminence = input("Enter Prominence for Peaks: ")
 plotSemilogy(x_vals,PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1)+th[1]*gaussianFunc(x_vals,th[0],th[2]))
 # plotSemilogy(x_vals,PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1))

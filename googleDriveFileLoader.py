@@ -21,6 +21,7 @@ class fileLoader:
     def __init__(self,FILE,FOLDER):
         self.FILE = FILE
         self.FOLDER = FOLDER
+        self.BS = None
 
     def listFiles(size):
         # Call the Drive v3 API
@@ -73,6 +74,7 @@ class fileLoader:
             folders = drive_service.files().list(fields="nextPageToken ,files(id, name)",q=query).execute().get('files', [])
             if not folders:
                 print('Folder does not exist.')
+                return None
             else:
                 for folder in folders:
                     folder_id = folder['id']
@@ -83,7 +85,7 @@ class fileLoader:
 
                     for xrdml in xrdmls.get('files',[]):
                         if xrdml.get('name') == self.FILE:
-                            print('File found')
+                            print('File found: %s' % self.FILE)
                             return xrdml.get('id')
                 print('No File Found')
                 return None
@@ -95,26 +97,27 @@ class fileLoader:
         self.downloadFile(self.findFile())
         with open('xrdml_files/%s' %self.FILE,'r') as file:
             file_input = file.read()
-        return BeautifulSoup(file_input)
+        self.BS = BeautifulSoup(file_input,features="html.parser")
 
     # get 2Theta start and end positions
     def get2Theta(self):
-        soup = self.convertToBS()
+        soup = self.BS
         return [float(soup.startposition.string),float(soup.endposition.string)]
 
     # get intensities of tth scan 
     def getIntensities(self):
-        soup = self.convertToBS()
+        soup = self.BS
         return [float(counts) for counts in soup.counts.string.split()]
 
     # get id 
     def getID(self):
-        soup = self.convertToBS()
+        soup = self.BS
         return soup.id.string
 
     # create dictionary of 2Theta and intensity values
     def createDict(self):
         d = {}
+        self.convertToBS()
         [tth_beg,tth_end] = self.get2Theta()
         intensities = self.getIntensities()
         tth = tth_beg
