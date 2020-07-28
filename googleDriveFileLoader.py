@@ -113,6 +113,16 @@ class fileLoader:
     def getID(self):
         soup = self.BS
         return soup.id.string
+    
+    # print xrdml file
+    def printFile(self):
+        soup = self.BS
+        print(soup)
+
+    # get kalpha2
+    def getKalpha2(self):
+        soup = self.BS
+        return soup.kalpha2.string
 
     # create dictionary of 2Theta and intensity values
     def createDict(self):

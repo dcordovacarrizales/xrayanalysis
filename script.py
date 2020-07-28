@@ -1,11 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import plotly.graph_objects as go
-import pandas as pd
+import math
+# import plotly.graph_objects as go
 import ntpath
 from scipy.signal import argrelextrema
-
-
 from scipy.signal import find_peaks
 import googleDriveFileLoader
 #TODO: Data Analysis
@@ -20,6 +18,8 @@ fLoader1 = googleDriveFileLoader.fileLoader(filename1,foldername1)
 fLoader2 = googleDriveFileLoader.fileLoader(filename2,foldername2)
 tth1 = fLoader1.createDict()
 tth2 = fLoader2.createDict()
+# fLoader1.printFile()
+
 
 #Return peak centers and amplitudes 
 def getPeaks(x, y, peaks):
@@ -60,11 +60,6 @@ def PseudoVoigt(x,y,sigma,std,eta):
     lorentzian = lorentzian/ sum(lorentzian)
     pseudo_voigt[i] = sum(eta * y[i:i+2*incr] * gaussian + (1-eta) * y[i:i+2*incr] * lorentzian)
   return pseudo_voigt
-
-# Returns the file name from a path 
-def fileName(file):
-    head, tail = ntpath.split(file)
-    return tail or ntpath.basename(head)
 
 # Outputs rangeslider style graph including: raw data, smoothed data, and peaks based off of smoothed data for a single dataset 
 def rangeSlider(x,y):
@@ -271,92 +266,110 @@ def plotSemilogy(x,y):
   # plt.semilogy(x,PseudoVoigt(x,y,0.05,2.7,1))
   plt.xlabel(r'Angle (2$\Theta$)')
   plt.ylabel(r'Intensity (Arb. Units)')
-  plt.xlim([20,30])
-  plt.ylim([1e0,1e7])
+  plt.xlim([10,110])
+  plt.ylim([1,1e7])
 
-def initializeTheta(x,y,prominence):
+def initializeTheta(x,y,nth_peak,prominence):
   peaks, _ = find_peaks(PseudoVoigt(x_vals,y_vals,0.05,2.7,1), prominence = prominence)
-  x0 = x[peaks[1]]
-  yp = 0.75 * y[peaks[1]]
+  x0 = x[peaks[nth_peak]]
+  yp = y[peaks[nth_peak]]
   sigma = np.random.rand()
-  return [x0,yp,sigma]
-
+  b = 0
+  return [x0,yp,sigma,b]
 
 def gradientDescent(theta0,x,y,eta,epsilon,min_x,max_x):
-  [x0,yp,sigma] = theta0
+  [x0,yp,sigma,b] = theta0
   prev_J = 0.0
   counts = 0
   N = int(len((np.where(x>min_x) and np.where(x<max_x)[0])))
   while True:
     prev_error = J = 0.0
-    print([x0,yp,sigma])
+
     # Adjust x0
     while True:
       deltaJ_x0 = 0
-      for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
-        h = yp*gaussianFunc(x[i],x0,sigma)
-        A1 = ((x[i] - x0)/(sigma ** 2 * np.sqrt(2*np.pi))) 
+      for i in np.where((x_vals>min_x) & (x_vals<max_x))[0]:
+        h = (yp / (sigma * np.sqrt(2*np.pi))) * gaussianFunc(x[i],x0,sigma) + b
+        COEFF = (yp * (x[i] - x0)/(sigma ** 2 * np.sqrt(2*np.pi))) 
         EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
-        deltaJ_x0 = deltaJ_x0 + (2/N) * (h - y[i]) * 2 * A1 * EXP * yp
-        J = J + (1e-2) * (2/N) * (h - y[i]) ** 2   # (1e-2) scalar prevents J from overflowing
+        deltaJ_x0 = deltaJ_x0 + (2/N) * (h - y[i]) * 2 * COEFF * EXP
+        J = J + (2/N) * (h - y[i]) ** 2   # (1e-4) scalar prevents J from overflowing
       x0 = x0 - eta * deltaJ_x0
       error = deltaJ_x0 ** 2
       if (abs(error - prev_error) < epsilon):
         break
-    
+      prev_error = error
+
     # Adjust yp 
     prev_error = 0.0
     while True:   
       deltaJ_yp = 0.0
-      for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
-        h = yp*gaussianFunc(x[i],x0,sigma)
+      COEFF = 1 / (sigma * np.sqrt(2*np.pi))
+      for i in np.where((x_vals>min_x) & (x_vals<max_x))[0]:
+        h = (yp / (sigma * np.sqrt(2*np.pi))) * gaussianFunc(x[i],x0,sigma) + b
         EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
-        deltaJ_yp = deltaJ_yp + (2/N) * (h - y[i])* EXP
-        J = J + (2/N)*(h - y[i])**2
-      yp = yp - 1e4 * eta * deltaJ_yp
+        deltaJ_yp = deltaJ_yp + (2/N) * (h - y[i])* COEFF * EXP
+        J = J + (2/N) * (h - y[i])**2
+      yp = yp - (1e4) * eta * deltaJ_yp
       error = deltaJ_yp ** 2
       if (abs(error - prev_error) < epsilon):
         break
+      prev_error = error
 
     # Adjust sigma
     prev_error = 0.0
     while True:
       deltaJ_sigma = 0
-      for i in (np.where(x>min_x) and np.where(x<max_x))[0]:
-        h = yp*gaussianFunc(x[i],x0,sigma) 
-        A2 = ((x[i] - x0)**2/(sigma ** 3 * np.sqrt(2*np.pi))) 
+      for i in np.where((x_vals>min_x) & (x_vals<max_x))[0]:
+        h = (yp / (sigma * np.sqrt(2*np.pi))) * gaussianFunc(x[i],x0,sigma) + b
+        COEFF = (yp / (2 * np.pi)) * (((x[i]-x0) ** 2 / sigma ** 4) - (1 / sigma ** 2))
         EXP = np.exp(-(x[i]-x0) ** 2 / (2 * sigma ** 2))
-        deltaJ_sigma = deltaJ_sigma + (2/N) * (h - y[i]) * A2 * EXP * yp
-        J = J + (2/N)*(h - y[i])**2
+        deltaJ_sigma = deltaJ_sigma + (2/N) * (h - y[i]) * COEFF * EXP
+        J = J + (2/N) * (h - y[i]) ** 2
       sigma = sigma - eta * deltaJ_sigma
       error = deltaJ_sigma ** 2
       if (abs(error - prev_error) < epsilon):
         break
-    
+      prev_error = error
+
+    # Adjust b
+    prev_error = 0.0
+    while True:
+      delta_J = 0
+      deltaJ_b = 0
+      for i in np.where((x_vals>min_x) & (x_vals<max_x))[0]:
+        h = (yp / (sigma * np.sqrt(2*np.pi))) * gaussianFunc(x[i],x0,sigma) + b
+        deltaJ_b = deltaJ_b  + (2/N) * (h - y[i]) 
+        J = J + (2/N) * (h - y[i]) ** 2
+      b = b - (1e4) * eta * deltaJ_b
+      error = deltaJ_b ** 2
+      if (abs(error - prev_error) < epsilon):
+        break
+      prev_error = error
+
     if (abs(J - prev_J) < epsilon) or counts > 1000:
       break
     prev_J = J
     counts = counts + 1
-  return [x0,yp,sigma]
 
+  return [x0,yp,sigma,b]
+
+def braggsLaw(n,theta,lbda):
+  d = (n * lbda) / (2 * math.sin(math.radians(theta)))
+  return '{:.3f}'.format(d)
+  
 x_vals,y_vals = np.array(list(tth1.keys())),np.array(list(tth1.values()))
-
 x_vals2, y_vals2 = np.array(list(tth2.keys())),np.array(list(tth2.values()))
-th0 = initializeTheta(x_vals,y_vals,10)
-th = gradientDescent(th0,x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1)-PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1),5e-5,0.01,23.4,28)
-# peakProminence = input("Enter Prominence for Peaks: ")
-plotSemilogy(x_vals,PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1)+th[1]*gaussianFunc(x_vals,th[0],th[2]))
-# plotSemilogy(x_vals,PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1))
-plotSemilogy(x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1))
-# plt.show()
-# peaksApprox, _ = find_peaks(PseudoVoigt(x_vals,y_vals,0.05,2.7,1), prominence = 10)
-# for p in peaksApprox:
-#   plt.plot(x_vals[p], PseudoVoigt(x_vals,y_vals,0.05,2.7,1)[p], marker='o', markersize=3, color="red")
-# print(np.argmax(PseudoVoigt(x_vals2,y_vals2,0.1,3,1)))
 
-
-# plotSemilogy(x_vals,sf*PseudoVoigt(x_vals,y_vals,0.1,3,1)-PseudoVoigt(x_vals2,y_vals2,0.1,3,1))
+th0 = initializeTheta(x_vals,y_vals,1,10)
+th = gradientDescent(th0,x_vals,PseudoVoigt(x_vals,y_vals,0.05,2.7,1) - PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1),5e-5,0.01,23,27)
+[x0,yp,sigma,b] = th
+lbda = float(fLoader2.getKalpha2())
+plotSemilogy(x_vals,y_vals)
+plotSemilogy(x_vals,(yp/ (sigma * np.sqrt(2*np.pi))) * gaussianFunc(x_vals,x0,sigma) + b + PseudoVoigt(x_vals2,y_vals2,0.05,2.7,1))
 plt.show()
+print(braggsLaw(1,x0,lbda))
+
 
 
 
